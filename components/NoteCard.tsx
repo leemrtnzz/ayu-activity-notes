@@ -68,7 +68,7 @@ export function NoteCard({ note }: { note: NoteType }) {
       </div>
 
       {/* Action Buttons (Hover) */}
-      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1">
+      <div className="absolute top-3 right-3 flex items-center gap-1">
         <button
           onClick={() => setIsEditing(true)}
           className="p-1.5 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-lg transition-colors"
