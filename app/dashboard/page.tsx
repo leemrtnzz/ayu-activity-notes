@@ -4,13 +4,19 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 
-// Tambahkan Promise pada searchParams untuk kompatibilitas Next.js 15+ (Turbopack)
+// Definisikan tipe data Note agar TypeScript tidak error
+type NoteType = {
+  id: string;
+  content: string;
+  created_at: string;
+}
+
 export default async function ActivityNotes({
   searchParams
 }: {
   searchParams: Promise<{ edit?: string }>
 }) {
-  // 2. Proteksi Rute: Cek apakah user punya akses
+  // Proteksi Rute: Cek apakah user punya akses
   const cookieStore = await cookies()
   if (cookieStore.get('auth_granted')?.value !== 'true') {
     redirect('/') // Tendang kembali ke halaman PIN jika belum login
@@ -32,12 +38,13 @@ export default async function ActivityNotes({
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
   // SERVER ACTION: Kunci Dashboard (Logout)
-    async function lockDashboard() {
-      'use server'
-      const cookieStore = await cookies()
-      cookieStore.delete('auth_granted')
-      redirect('/')
-    }
+  async function lockDashboard() {
+    'use server'
+    const cookieStore = await cookies()
+    cookieStore.delete('auth_granted')
+    redirect('/')
+  }
+
   // SERVER ACTION: Tambah Catatan
   async function addNote(formData: FormData) {
     'use server'
@@ -57,7 +64,7 @@ export default async function ActivityNotes({
       content: content.trim(),
       created_at: createdAt
     })
-    revalidatePath('/')
+    revalidatePath('/dashboard')
   }
 
   // SERVER ACTION: Hapus Catatan
@@ -66,7 +73,7 @@ export default async function ActivityNotes({
     const id = formData.get('id') as string
     const supabase = await createClient()
     await supabase.from('activity_notes_ayu').delete().eq('id', id)
-    revalidatePath('/')
+    revalidatePath('/dashboard')
   }
 
   // SERVER ACTION: Update Catatan
@@ -80,13 +87,13 @@ export default async function ActivityNotes({
       await supabase.from('activity_notes_ayu').update({ content: content.trim() }).eq('id', id)
     }
     // Hapus parameter ?edit dari URL setelah selesai
-    redirect('/')
+    redirect('/dashboard')
   }
 
   const noteCount = notes?.length ?? 0
 
-  // Mengelompokkan data berdasarkan tanggal
-  const groupedNotes = notes?.reduce((acc, note) => {
+  // Mengelompokkan data berdasarkan tanggal menggunakan Tipe yang sudah didefinisikan
+  const groupedNotes = (notes || []).reduce<Record<string, NoteType[]>>((acc, note: any) => {
     const dateObj = new Date(note.created_at)
     const dateKey = dateObj.toLocaleDateString('id-ID', {
       weekday: 'long',
@@ -96,9 +103,10 @@ export default async function ActivityNotes({
     })
 
     if (!acc[dateKey]) acc[dateKey] = []
-    acc[dateKey].push(note)
+    acc[dateKey].push(note as NoteType)
+
     return acc
-  }, {} as Record<string, typeof notes>) || {}
+  }, {})
 
   const activeDays = Object.keys(groupedNotes).length
 
@@ -115,21 +123,23 @@ export default async function ActivityNotes({
           <div className="flex items-center gap-2">
             <span className="text-lg font-bold tracking-tight text-white">Act<span className="text-zinc-500">Notes</span></span>
           </div>
-          <div className="text-sm font-medium text-zinc-400">
-            {now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+          <div className="flex items-center gap-4">
+            <div className="text-sm font-medium text-zinc-400 hidden sm:block">
+              {now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </div>
+            {/* Tombol Logout/Kunci */}
+            <form action={lockDashboard}>
+              <button
+                type="submit"
+                className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                title="Kunci Dashboard"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </button>
+            </form>
           </div>
-          {/* Tombol Logout/Kunci */}
-                      <form action={lockDashboard}>
-                        <button
-                          type="submit"
-                          className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-                          title="Kunci Dashboard"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
-                        </button>
-                      </form>
         </div>
       </nav>
 
@@ -160,7 +170,7 @@ export default async function ActivityNotes({
                   />
                   <div className="flex items-center justify-between pt-4 border-t border-white/5">
 
-                    {/* Date Picker (Kiri) */}
+                    {/* Date Picker */}
                     <div className="flex items-center gap-2">
                       <div className="relative flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2 transition-colors focus-within:border-fuchsia-500/50">
                         <svg className="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
@@ -233,7 +243,7 @@ export default async function ActivityNotes({
                     {Object.entries(groupedNotes).map(([date, dayNotes]) => (
                       <div key={date} className="relative">
 
-                        {/* DESAIN TANGGAL BARU (Divider Elegan) */}
+                        {/* Divider Tanggal */}
                         <div className="flex items-center gap-4 mb-6 mt-8 first:mt-0">
                           <div className="text-xs font-bold tracking-[0.2em] uppercase text-zinc-500">
                             {date}
@@ -249,7 +259,7 @@ export default async function ActivityNotes({
                               {/* Glowing Dot Node */}
                               <div className="absolute left-[-5px] top-4 h-2.5 w-2.5 rounded-full bg-fuchsia-500 shadow-[0_0_10px_rgba(217,70,239,0.6)] group-hover:scale-125 transition-transform duration-300" />
 
-                              {/* JIKA DALAM MODE EDIT */}
+                              {/* MODE EDIT */}
                               {editId === note.id ? (
                                 <div className="bg-zinc-900/80 border border-fuchsia-500/50 p-4 rounded-2xl shadow-lg">
                                   <form action={updateNote} className="flex flex-col gap-3">
@@ -261,7 +271,7 @@ export default async function ActivityNotes({
                                       rows={2}
                                     />
                                     <div className="flex justify-end gap-2 items-center mt-1">
-                                      <Link href="/" className="px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white transition-colors">
+                                      <Link href="/dashboard" className="px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white transition-colors">
                                         Batal
                                       </Link>
                                       <button type="submit" className="px-4 py-1.5 text-xs font-semibold bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg transition-colors">
@@ -284,10 +294,10 @@ export default async function ActivityNotes({
                                     })}
                                   </div>
 
-                                  {/* TOMBOL ACTION (MUNCUL SAAT DI-HOVER) */}
+                                  {/* TOMBOL ACTION (HOVER) */}
                                   <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1">
                                     <Link
-                                      href={`/?edit=${note.id}`}
+                                      href={`/dashboard?edit=${note.id}`}
                                       className="p-1.5 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-lg transition-colors"
                                       title="Edit"
                                     >
