@@ -3,6 +3,8 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
+import { SubmitButton } from '@/components/SubmitButton'
+import { DeleteButton } from '@/components/DeleteButton'
 
 // Definisikan tipe data Note agar TypeScript tidak error
 type NoteType = {
@@ -33,9 +35,20 @@ export default async function ActivityNotes({
     .select('*')
     .order('created_at', { ascending: false })
 
-  // Mendapatkan string tanggal hari ini format YYYY-MM-DD untuk default input date
-  const now = new Date()
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  // Mendapatkan string tanggal dan waktu saat ini (WIB/Jakarta) untuk default input datetime
+  // Waktu saat ini: Friday, September 25, 2026 at 7:32:50 PM WIB (sebagai referensi)
+  const now = new Date();
+
+  // Menyesuaikan waktu ke WIB (UTC+7)
+  const jakartaTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+
+  const y = jakartaTime.getUTCFullYear();
+  const m = String(jakartaTime.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(jakartaTime.getUTCDate()).padStart(2, '0');
+  const h = String(jakartaTime.getUTCHours()).padStart(2, '0');
+  const min = String(jakartaTime.getUTCMinutes()).padStart(2, '0');
+
+  const defaultDateTime = `${y}-${m}-${d}T${h}:${min}`;
 
   // SERVER ACTION: Kunci Dashboard (Logout)
   async function lockDashboard() {
@@ -49,14 +62,16 @@ export default async function ActivityNotes({
   async function addNote(formData: FormData) {
     'use server'
     const content = formData.get('content') as string
-    const dateStr = formData.get('date') as string
+    const dateStr = formData.get('date') as string // Berupa YYYY-MM-DDTHH:mm
 
     if (!content?.trim()) return
 
-    // Tentukan waktu. Jika user memilih tanggal selain hari ini, set jam ke 12:00 siang
+    // Konversi waktu yang diinputkan (dianggap WIB) kembali ke UTC sebelum disimpan
     let createdAt = new Date().toISOString()
-    if (dateStr && dateStr !== todayStr) {
-      createdAt = new Date(`${dateStr}T12:00:00Z`).toISOString()
+    if (dateStr) {
+      // Buat Date object dari input, kurangi 7 jam untuk mendapatkan UTC
+      const localDate = new Date(dateStr)
+      createdAt = new Date(localDate.getTime() - (7 * 60 * 60 * 1000)).toISOString()
     }
 
     const supabase = await createClient()
@@ -94,6 +109,7 @@ export default async function ActivityNotes({
 
   // Mengelompokkan data berdasarkan tanggal menggunakan Tipe yang sudah didefinisikan
   const groupedNotes = (notes || []).reduce<Record<string, NoteType[]>>((acc, note: any) => {
+    // Tampilkan dalam format bahasa Indonesia
     const dateObj = new Date(note.created_at)
     const dateKey = dateObj.toLocaleDateString('id-ID', {
       weekday: 'long',
@@ -154,7 +170,7 @@ export default async function ActivityNotes({
               <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-zinc-200 to-zinc-500 mb-2">
                 Capture your day.
               </h1>
-              <p className="text-zinc-400 text-lg">Catat aktivitas dan ide brilianmu dalam satu timeline.</p>
+              <p className="text-zinc-400 text-lg">Catat aktivitas harianmu, menjadi disiplin.</p>
             </div>
 
             {/* Input Form Card */}
@@ -166,30 +182,31 @@ export default async function ActivityNotes({
                     required
                     rows={3}
                     placeholder="Apa aktivitasmu?"
-                    className="w-full bg-transparent text-lg text-white placeholder-zinc-600 resize-none outline-none focus:ring-0"
+                    // MENGGUNAKAN text-[16px] AGAR SAFARI TIDAK AUTO-ZOOM
+                    className="w-full bg-transparent text-[16px] text-white placeholder-zinc-600 resize-none outline-none focus:ring-0"
                   />
                   <div className="flex items-center justify-between pt-4 border-t border-white/5">
 
-                    {/* Date Picker */}
+                    {/* Date Time Picker dengan desain yang diminta */}
                     <div className="flex items-center gap-2">
                       <div className="relative flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2 transition-colors focus-within:border-fuchsia-500/50">
-                        <svg className="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        <svg className="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
                         <input
-                          type="date"
+                          type="datetime-local"
                           name="date"
-                          defaultValue={todayStr}
-                          className="bg-transparent text-sm font-medium text-zinc-300 outline-none w-[120px] cursor-pointer [&::-webkit-calendar-picker-indicator]:invert-[0.8] [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:hover:opacity-100"
+                          defaultValue={defaultDateTime}
+                          // MENGGUNAKAN text-[16px] AGAR SAFARI TIDAK AUTO-ZOOM
+                          className="bg-transparent text-[16px] font-medium text-zinc-300 outline-none w-[170px] cursor-pointer [&::-webkit-calendar-picker-indicator]:invert-[0.8] [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:hover:opacity-100"
                         />
                       </div>
                     </div>
 
-                    <button
-                      type="submit"
-                      className="px-6 py-2.5 rounded-xl bg-white text-black font-semibold text-sm hover:bg-zinc-200 transition-all active:scale-95 flex items-center gap-2 shadow-[0_0_20px_rgba(255,255,255,0.1)]"
-                    >
+                    <SubmitButton className="px-6 py-2.5 rounded-xl bg-white text-black font-semibold text-sm hover:bg-zinc-200 transition-all active:scale-95 flex items-center gap-2 shadow-[0_0_20px_rgba(255,255,255,0.1)]">
                       <span>Simpan</span>
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                    </button>
+                    </SubmitButton>
                   </div>
                 </form>
               </div>
@@ -267,16 +284,17 @@ export default async function ActivityNotes({
                                     <textarea
                                       name="content"
                                       defaultValue={note.content}
-                                      className="w-full bg-transparent text-[15px] text-white resize-none outline-none border-b border-zinc-700 pb-2 focus:border-fuchsia-500"
+                                      // MENGGUNAKAN text-[16px] AGAR SAFARI TIDAK AUTO-ZOOM
+                                      className="w-full bg-transparent text-[16px] text-white resize-none outline-none border-b border-zinc-700 pb-2 focus:border-fuchsia-500"
                                       rows={2}
                                     />
                                     <div className="flex justify-end gap-2 items-center mt-1">
                                       <Link href="/dashboard" className="px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white transition-colors">
                                         Batal
                                       </Link>
-                                      <button type="submit" className="px-4 py-1.5 text-xs font-semibold bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg transition-colors">
+                                      <SubmitButton className="px-4 py-1.5 text-xs font-semibold bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg transition-colors flex items-center justify-center">
                                         Simpan
-                                      </button>
+                                      </SubmitButton>
                                     </div>
                                   </form>
                                 </div>
@@ -305,13 +323,7 @@ export default async function ActivityNotes({
                                     </Link>
                                     <form action={deleteNote}>
                                       <input type="hidden" name="id" value={note.id} />
-                                      <button
-                                        type="submit"
-                                        className="p-1.5 bg-zinc-800/80 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 rounded-lg transition-colors"
-                                        title="Hapus"
-                                      >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                      </button>
+                                      <DeleteButton />
                                     </form>
                                   </div>
                                 </div>
